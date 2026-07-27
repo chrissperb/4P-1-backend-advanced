@@ -16,7 +16,7 @@ class User {
     this.name = name;
     this.birthday = new Date(birthday);
     this.email = email.toLowerCase().trim();
-    this.password = password; // In production, hash with bcrypt/argon2
+    this.password = password;
     this.role = role;
     this.isActive = true;
     this.createdAt = new Date();
