@@ -1,4 +1,15 @@
 const User = require('./User');
+const express = require('express');
+
+const app = express();
+
+const PORT = 3000;
+
+app.use(express.json());
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+})
 
 console.log('=== DEMONSTRATING ALL USER METHODS ===\n');
 
