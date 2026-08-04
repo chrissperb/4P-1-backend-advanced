@@ -1,23 +1,46 @@
 # 4P-1-backend-advanced
 
-RESTful API para gestão de usuários desenvolvida com Node.js e Express seguindo a arquitetura MVC (sem a camada de View).
+RESTful API para gestão de usuários desenvolvida com Node.js, Express e MongoDB (Mongoose) seguindo a arquitetura em camadas (Routes, Controllers, Services, Models) com tratamento centralizado de erros de domínio e suíte completa de testes.
 
 ## Estrutura do Projeto
 
 ```text
 4P-1-backend-advanced/
-├── models/
-│   └── User.js             # Modelo e validações do Usuário
+├── config/
+│   └── db.js                 # Conexão com o banco de dados MongoDB via Mongoose
 ├── controller/
-│   └── userController.js   # Controladores (CRUD, login e logs)
+│   └── userController.js     # Controladores HTTP (validação de requisição/resposta)
+├── errors/
+│   └── customErrors.js       # Exceções de domínio (NotFoundError, ConflictError, etc.)
+├── models/
+│   └── User.js               # Modelo Mongoose e validações de dados do Usuário
 ├── routes/
-│   └── userRoutes.js       # Definição das rotas da API REST
-├── .env                    # Variáveis de ambiente (não versionado)
-├── .env.example            # Template de variáveis de ambiente
-├── index.js                # Servidor Express e inicialização
+│   └── userRoutes.js         # Definição das rotas da API REST
+├── services/
+│   └── userService.js        # Camada de Serviço (Regras de negócio e operações de banco)
+├── tests/
+│   ├── unit/                 # Testes unitários do Modelo e dos Serviços
+│   └── integration/          # Testes de integração das rotas HTTP (Supertest)
+├── .env                      # Variáveis de ambiente (não versionado)
+├── .env.example              # Template de variáveis de ambiente
+├── app.js                    # Configuração da aplicação Express e Middlewares
+├── docker-compose.yml        # Configuração do banco de dados MongoDB 7 no Docker
+├── index.js                  # Inicialização do servidor e conexão com o DB
 ├── package.json
 └── README.md
 ```
+
+---
+
+## Arquitetura e Camadas
+
+- **Routes (`routes/`)**: Mapeiam os endpoints REST para as funções dos controladores.
+- **Controllers (`controller/`)**: Tratam requisições HTTP, extraem dados e parâmetros, invocam a camada de serviços e retornam as respostas formatadas com seus respectivos códigos de status (200, 201, 400, 401, 404, 409).
+- **Services (`services/`)**: Concentram todas as regras de negócio, validações de unicidade de e-mail e operações assíncronas com o MongoDB via Mongoose.
+- **Models (`models/`)**: Definem os Schemas do Mongoose com validações rigorosas e métodos utilitários.
+- **Errors (`errors/`)**: Erros de domínio estruturados (`AppError`, `NotFoundError`, `ConflictError`, `ValidationError`, `UnauthorizedError`) para mapeamento limpo de status HTTP.
+
+---
 
 ## Regras de Validação de Dados
 
@@ -27,13 +50,18 @@ RESTful API para gestão de usuários desenvolvida com Node.js e Express seguind
 - **`password`**: Texto obrigatório com no mínimo 6 caracteres.
 - **`role`**: Array de papéis. Papéis permitidos: `['user', 'admin', 'manager']` (padrão: `['user']`).
 
+---
+
 ## Sistema de Logging
 
 Todas as tentativas e erros de validação são registrados no console com marcadores formatados:
-- `[VALIDATION FAILED]`: Emitido pelo modelo ao falhar em uma regra de negócio (ex: data futura).
-- `[API VALIDATION ERROR]`: Emitido pelo controlador ao capturar requisições HTTP 400 inválidas.
+- `[DB SUCCESS]`: Emitido ao conectar com sucesso ao MongoDB.
+- `[VALIDATION FAILED]`: Emitido ao falhar em uma regra de negócio no modelo.
+- `[API VALIDATION ERROR]`: Emitido ao capturar requisições HTTP 400 inválidas.
 - `[API WARN]`: Emitido ao tentar buscar/atualizar usuário inexistente ou e-mail duplicado.
 - `[API SUCCESS]`: Emitido ao concluir operações de criação, atualização, exclusão e autenticação.
+
+---
 
 ## Endpoints e Modelos de Requisição/Resposta
 
@@ -66,14 +94,6 @@ Todas as tentativas e erros de validação são registrados no console com marca
     "createdAt": "2026-07-29T23:00:00.000Z",
     "updatedAt": "2026-07-29T23:00:00.000Z"
   }
-}
-```
-
-**Response (400 Bad Request - Data Futura):**
-```json
-{
-  "success": false,
-  "message": "Validation error: birthday cannot be a future date."
 }
 ```
 
@@ -136,25 +156,6 @@ Todas as tentativas e erros de validação são registrados no console com marca
 }
 ```
 
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "Authentication successful",
-  "data": {
-    "id": "e4b3c9a1-8d2e-4f1a-9c3b-5d6e7f8a9b0c",
-    "name": "Alice Silva",
-    "birthday": "1995-05-15",
-    "age": 31,
-    "email": "alice@example.com",
-    "role": ["user", "admin"],
-    "isActive": true,
-    "createdAt": "2026-07-29T23:00:00.000Z",
-    "updatedAt": "2026-07-29T23:00:00.000Z"
-  }
-}
-```
-
 ---
 
 ### 5. Atualizar Perfil (`PUT /api/users/{id}`)
@@ -184,19 +185,29 @@ Todas as tentativas e erros de validação são registrados no console com marca
 
 ## Como Configurar e Executar
 
-1. Crie o arquivo `.env` baseado no `.env.example`:
+1. **Configurar variáveis de ambiente:**
    ```bash
    cp .env.example .env
    ```
 
-2. Instale as dependências:
+2. **Instalar as dependências:**
    ```bash
    npm install
    ```
 
-3. Inicie o servidor:
+3. **Subir o banco de dados MongoDB 7 no Docker:**
    ```bash
-   # Modo desenvolvimento
+   docker compose up -d
+   ```
+
+4. **Executar a suíte de testes (Jest + Supertest):**
+   ```bash
+   npm test
+   ```
+
+5. **Iniciar a aplicação:**
+   ```bash
+   # Modo desenvolvimento (com Nodemon)
    npm run dev
 
    # Modo produção
