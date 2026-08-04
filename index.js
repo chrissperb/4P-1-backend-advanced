@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const userRoutes = require('./routes/userRoutes');
+const { AppError } = require('./errors/customErrors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,6 +30,13 @@ app.use((req, res) => {
 
 // Global Error Handler
 app.use((err, req, res, next) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      success: false,
+      message: err.message
+    });
+  }
+
   console.error(err.stack);
   res.status(500).json({
     success: false,
