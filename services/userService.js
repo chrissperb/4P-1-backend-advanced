@@ -6,16 +6,14 @@ const {
   UnauthorizedError
 } = require('../errors/customErrors');
 
-// In-memory data store for users
-const usersStore = [];
-
 class UserService {
-  getAllUsers() {
-    return usersStore.map(user => user.toJSON());
+  async getAllUsers() {
+    const users = await User.find();
+    return users.map(user => user.toJSON());
   }
 
-  getUserById(id) {
-    const user = usersStore.find(u => u.id === id);
+  async getUserById(id) {
+    const user = await User.findOne({ id });
     if (!user) {
       console.warn(`[API WARN] GET /api/users/${id} - User not found`);
       throw new NotFoundError('User not found');
@@ -23,11 +21,11 @@ class UserService {
     return user.toJSON();
   }
 
-  createUser({ name, birthday, email, password, role }) {
+  async createUser({ name, birthday, email, password, role }) {
     const normalizedEmail = email?.toLowerCase().trim();
 
     // Check if email is already registered
-    const existingUser = usersStore.find(u => u.email === normalizedEmail);
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       console.warn(`[API WARN] POST /api/users - Email already registered: "${email}"`);
       throw new ConflictError('Email already registered');
@@ -35,7 +33,7 @@ class UserService {
 
     try {
       const newUser = new User({ name, birthday, email, password, role });
-      usersStore.push(newUser);
+      await newUser.save();
 
       console.log(`[API SUCCESS] POST /api/users - User created ID: ${newUser.id}`);
       return newUser.toJSON();
@@ -45,15 +43,15 @@ class UserService {
     }
   }
 
-  updateUser(id, { name, email, birthday }) {
-    const user = usersStore.find(u => u.id === id);
+  async updateUser(id, { name, email, birthday }) {
+    const user = await User.findOne({ id });
     if (!user) {
       console.warn(`[API WARN] PUT /api/users/${id} - User not found`);
       throw new NotFoundError('User not found');
     }
 
     if (email && email.toLowerCase().trim() !== user.email) {
-      const emailTaken = usersStore.find(u => u.email === email.toLowerCase().trim());
+      const emailTaken = await User.findOne({ email: email.toLowerCase().trim() });
       if (emailTaken) {
         console.warn(`[API WARN] PUT /api/users/${id} - Email already in use: "${email}"`);
         throw new ConflictError('Email already in use');
@@ -62,6 +60,7 @@ class UserService {
 
     try {
       user.updateProfile({ name, email, birthday });
+      await user.save();
       console.log(`[API SUCCESS] PUT /api/users/${id} - User updated`);
       return user.toJSON();
     } catch (error) {
@@ -70,26 +69,25 @@ class UserService {
     }
   }
 
-  deleteUser(id) {
-    const userIndex = usersStore.findIndex(u => u.id === id);
-    if (userIndex === -1) {
+  async deleteUser(id) {
+    const user = await User.findOneAndDelete({ id });
+    if (!user) {
       console.warn(`[API WARN] DELETE /api/users/${id} - User not found`);
       throw new NotFoundError('User not found');
     }
 
-    usersStore.splice(userIndex, 1);
     console.log(`[API SUCCESS] DELETE /api/users/${id} - User deleted`);
     return true;
   }
 
-  authenticateUser({ email, password }) {
+  async authenticateUser({ email, password }) {
     if (!email || !password) {
       console.warn('[API WARN] POST /api/users/login - Missing email or password');
       throw new ValidationError('Email and password are required');
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const user = usersStore.find(u => u.email === normalizedEmail);
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user || !user.authenticate(password)) {
       console.warn(`[API WARN] POST /api/users/login - Failed login attempt for "${email}"`);

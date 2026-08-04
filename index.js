@@ -1,10 +1,14 @@
 require('dotenv').config();
 const express = require('express');
+const connectDB = require('./config/db');
 const userRoutes = require('./routes/userRoutes');
 const { AppError } = require('./errors/customErrors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Connect to MongoDB
+connectDB();
 
 // Body parser middleware
 app.use(express.json());

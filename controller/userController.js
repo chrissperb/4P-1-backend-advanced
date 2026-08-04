@@ -1,9 +1,9 @@
 const userService = require('../services/userService');
 const { AppError } = require('../errors/customErrors');
 
-const getAllUsers = (req, res, next) => {
+const getAllUsers = async (req, res, next) => {
   try {
-    const users = userService.getAllUsers();
+    const users = await userService.getAllUsers();
     res.status(200).json({
       success: true,
       total: users.length,
@@ -14,10 +14,10 @@ const getAllUsers = (req, res, next) => {
   }
 };
 
-const getUserById = (req, res, next) => {
+const getUserById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const user = userService.getUserById(id);
+    const user = await userService.getUserById(id);
     res.status(200).json({
       success: true,
       data: user
@@ -33,9 +33,9 @@ const getUserById = (req, res, next) => {
   }
 };
 
-const createUser = (req, res, next) => {
+const createUser = async (req, res, next) => {
   try {
-    const newUser = userService.createUser(req.body);
+    const newUser = await userService.createUser(req.body);
     res.status(201).json({
       success: true,
       message: 'User created successfully',
@@ -52,10 +52,10 @@ const createUser = (req, res, next) => {
   }
 };
 
-const updateUser = (req, res, next) => {
+const updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const updatedUser = userService.updateUser(id, req.body);
+    const updatedUser = await userService.updateUser(id, req.body);
     res.status(200).json({
       success: true,
       message: 'User profile updated successfully',
@@ -72,10 +72,10 @@ const updateUser = (req, res, next) => {
   }
 };
 
-const deleteUser = (req, res, next) => {
+const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    userService.deleteUser(id);
+    await userService.deleteUser(id);
     res.status(200).json({
       success: true,
       message: 'User deleted successfully'
@@ -91,9 +91,9 @@ const deleteUser = (req, res, next) => {
   }
 };
 
-const authenticateUser = (req, res, next) => {
+const authenticateUser = async (req, res, next) => {
   try {
-    const user = userService.authenticateUser(req.body);
+    const user = await userService.authenticateUser(req.body);
     res.status(200).json({
       success: true,
       message: 'Authentication successful',
