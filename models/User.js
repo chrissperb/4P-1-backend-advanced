@@ -1,163 +1,157 @@
+const mongoose = require('mongoose');
 const crypto = require('crypto');
 
 const ALLOWED_ROLES = ['user', 'admin', 'manager'];
 
-class User {
-  /**
-   * @param {Object} params
-   * @param {string} params.name - Full name (mandatory)
-   * @param {string|Date} params.birthday - Birth date (mandatory, cannot be future date)
-   * @param {string} params.email - Email address (mandatory)
-   * @param {string} params.password - Password (mandatory, min 6 chars)
-   * @param {string[]} [params.role=['user']] - Array of user roles (optional)
-   */
-  constructor({ name, birthday, email, password, role = ['user'] }) {
-    this._validateConstructorArgs({ name, birthday, email, password, role });
-
-    this.id = crypto.randomUUID();
-    this.name = name.trim();
-    this.birthday = new Date(birthday);
-    this.email = email.toLowerCase().trim();
-    this.password = password;
-    this.role = Array.isArray(role) ? role : [role];
-    this.isActive = true;
-    this.createdAt = new Date();
-    this.updatedAt = new Date();
+const userSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      default: () => crypto.randomUUID(),
+      unique: true,
+      index: true
+    },
+    name: {
+      type: String,
+      required: [true, 'Validation error: name is mandatory.'],
+      trim: true,
+      validate: {
+        validator: function (v) {
+          return typeof v === 'string' && v.trim().length >= 2;
+        },
+        message: 'Validation error: name must be a string with at least 2 characters.'
+      }
+    },
+    birthday: {
+      type: Date,
+      required: [true, 'Validation error: birthday is mandatory.'],
+      validate: [
+        {
+          validator: function (v) {
+            return v instanceof Date && !isNaN(v.getTime());
+          },
+          message: 'Validation error: birthday must be a valid date format (e.g. YYYY-MM-DD).'
+        },
+        {
+          validator: function (v) {
+            return v <= new Date();
+          },
+          message: 'Validation error: birthday cannot be a future date.'
+        },
+        {
+          validator: function (v) {
+            return v >= new Date('1900-01-01');
+          },
+          message: 'Validation error: birthday cannot be before year 1900.'
+        }
+      ]
+    },
+    email: {
+      type: String,
+      required: [true, 'Validation error: invalid email format.'],
+      lowercase: true,
+      trim: true,
+      unique: true,
+      validate: {
+        validator: function (v) {
+          return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+        },
+        message: 'Validation error: invalid email format.'
+      }
+    },
+    password: {
+      type: String,
+      required: [true, 'Validation error: password must be at least 6 characters long.'],
+      minlength: [6, 'Validation error: password must be at least 6 characters long.']
+    },
+    role: {
+      type: [String],
+      default: ['user'],
+      validate: {
+        validator: function (roles) {
+          if (!Array.isArray(roles)) return false;
+          return roles.every(r => ALLOWED_ROLES.includes(r));
+        },
+        message: props => `Validation error: invalid role(s). Allowed roles: ${ALLOWED_ROLES.join(', ')}.`
+      }
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  },
+  {
+    timestamps: true
   }
+);
 
-  _validateConstructorArgs({ name, birthday, email, password, role }) {
-    this._validateName(name);
-    this._validateBirthday(birthday);
-    this._validateEmail(email);
-    this._validatePassword(password);
-    if (role) this._validateRole(role);
+// Virtual for calculating age dynamically
+userSchema.methods.getAge = function () {
+  const today = new Date();
+  const birth = new Date(this.birthday);
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
   }
+  return age;
+};
 
-  _validateName(name) {
+// Instance method to authenticate user
+userSchema.methods.authenticate = function (inputPassword) {
+  return this.password === inputPassword;
+};
+
+// Method to update profile with validation
+userSchema.methods.updateProfile = function ({ name, email, birthday }) {
+  if (name !== undefined) {
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
-      const msg = 'Validation error: name must be a string with at least 2 characters.';
-      console.warn(`[VALIDATION FAILED] ${msg} (Received: "${name}")`);
-      throw new Error(msg);
+      throw new Error('Validation error: name must be a string with at least 2 characters.');
     }
+    this.name = name.trim();
   }
 
-  _validateBirthday(birthday) {
-    if (!birthday) {
-      const msg = 'Validation error: birthday is mandatory.';
-      console.warn(`[VALIDATION FAILED] ${msg}`);
-      throw new Error(msg);
-    }
-
-    const birthDate = new Date(birthday);
-    if (isNaN(birthDate.getTime())) {
-      const msg = 'Validation error: birthday must be a valid date format (e.g. YYYY-MM-DD).';
-      console.warn(`[VALIDATION FAILED] ${msg} (Received: "${birthday}")`);
-      throw new Error(msg);
-    }
-
-    const now = new Date();
-    if (birthDate > now) {
-      const msg = 'Validation error: birthday cannot be a future date.';
-      console.warn(`[VALIDATION FAILED] ${msg} (Received: "${birthday}")`);
-      throw new Error(msg);
-    }
-
-    const minDate = new Date('1900-01-01');
-    if (birthDate < minDate) {
-      const msg = 'Validation error: birthday cannot be before year 1900.';
-      console.warn(`[VALIDATION FAILED] ${msg} (Received: "${birthday}")`);
-      throw new Error(msg);
-    }
-  }
-
-  _validateEmail(email) {
+  if (email !== undefined) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || typeof email !== 'string' || !emailRegex.test(email.trim())) {
-      const msg = 'Validation error: invalid email format.';
-      console.warn(`[VALIDATION FAILED] ${msg} (Received: "${email}")`);
-      throw new Error(msg);
+      throw new Error('Validation error: invalid email format.');
     }
+    this.email = email.toLowerCase().trim();
   }
 
-  _validatePassword(password) {
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      const msg = 'Validation error: password must be at least 6 characters long.';
-      console.warn(`[VALIDATION FAILED] ${msg}`);
-      throw new Error(msg);
+  if (birthday !== undefined) {
+    const birthDate = new Date(birthday);
+    if (isNaN(birthDate.getTime())) {
+      throw new Error('Validation error: birthday must be a valid date format (e.g. YYYY-MM-DD).');
     }
-  }
-
-  _validateRole(role) {
-    const rolesArray = Array.isArray(role) ? role : [role];
-    const invalidRoles = rolesArray.filter(r => !ALLOWED_ROLES.includes(r));
-    if (invalidRoles.length > 0) {
-      const msg = `Validation error: invalid role(s) [${invalidRoles.join(', ')}]. Allowed roles: ${ALLOWED_ROLES.join(', ')}.`;
-      console.warn(`[VALIDATION FAILED] ${msg}`);
-      throw new Error(msg);
+    if (birthDate > new Date()) {
+      throw new Error('Validation error: birthday cannot be a future date.');
     }
-  }
-
-  getAge() {
-    const today = new Date();
-    const birth = new Date(this.birthday);
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
+    if (birthDate < new Date('1900-01-01')) {
+      throw new Error('Validation error: birthday cannot be before year 1900.');
     }
-    return age;
+    this.birthday = birthDate;
   }
+};
 
-  updateProfile({ name, email, birthday }) {
-    if (name !== undefined) {
-      this._validateName(name);
-      this.name = name.trim();
-    }
-    if (email !== undefined) {
-      this._validateEmail(email);
-      this.email = email.toLowerCase().trim();
-    }
-    if (birthday !== undefined) {
-      this._validateBirthday(birthday);
-      this.birthday = new Date(birthday);
-    }
-    this.updatedAt = new Date();
-  }
-
-  updatePassword(newPassword) {
-    this._validatePassword(newPassword);
-    this.password = newPassword;
-    this.updatedAt = new Date();
-  }
-
-  authenticate(inputPassword) {
-    return this.password === inputPassword;
-  }
-
-  deactivate() {
-    this.isActive = false;
-    this.updatedAt = new Date();
-  }
-
-  activate() {
-    this.isActive = true;
-    this.updatedAt = new Date();
-  }
-
-  toJSON() {
+// Configure JSON output representation
+userSchema.set('toJSON', {
+  transform: (doc, ret) => {
     return {
-      id: this.id,
-      name: this.name,
-      birthday: this.birthday.toISOString().split('T')[0],
-      age: this.getAge(),
-      email: this.email,
-      role: this.role,
-      isActive: this.isActive,
-      createdAt: this.createdAt,
-      updatedAt: this.updatedAt
+      id: ret.id,
+      name: ret.name,
+      birthday: ret.birthday ? new Date(ret.birthday).toISOString().split('T')[0] : null,
+      age: doc.getAge(),
+      email: ret.email,
+      role: ret.role,
+      isActive: ret.isActive,
+      createdAt: ret.createdAt,
+      updatedAt: ret.updatedAt
     };
   }
-}
+});
+
+const User = mongoose.model('User', userSchema);
 
 module.exports = User;
