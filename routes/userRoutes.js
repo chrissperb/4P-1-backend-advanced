@@ -8,13 +8,16 @@ const {
   deleteUser,
   authenticateUser
 } = require('../controller/userController');
+const { authenticateToken } = require('../middleware/authMiddleware');
 
-// Routes definitions for REST API
-router.get('/', getAllUsers);
-router.get('/:id', getUserById);
-router.post('/', createUser);
+// Public routes
 router.post('/login', authenticateUser);
-router.put('/:id', updateUser);
-router.delete('/:id', deleteUser);
+router.post('/', createUser);
+
+// Protected routes (Requires valid JWT Bearer token)
+router.get('/', authenticateToken, getAllUsers);
+router.get('/:id', authenticateToken, getUserById);
+router.put('/:id', authenticateToken, updateUser);
+router.delete('/:id', authenticateToken, deleteUser);
 
 module.exports = router;

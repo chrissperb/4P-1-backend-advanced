@@ -1,6 +1,8 @@
 # 4P-1-backend-advanced
 
-RESTful API para gestão de usuários desenvolvida com Node.js, Express e MongoDB (Mongoose) seguindo a arquitetura em camadas (Routes, Controllers, Services, Models) com tratamento centralizado de erros de domínio e suíte completa de testes.
+RESTful API para gestão de usuários desenvolvida com Node.js, Express e MongoDB (Mongoose) seguindo a arquitetura em camadas (Routes, Controllers, Services, Models), camada de segurança com **Autenticação JWT (JSON Web Tokens)**, controle de acesso baseado em papéis (RBAC) e suíte de testes automatizados com Jest e Supertest.
+
+---
 
 ## Estrutura do Projeto
 
@@ -11,16 +13,20 @@ RESTful API para gestão de usuários desenvolvida com Node.js, Express e MongoD
 ├── controller/
 │   └── userController.js     # Controladores HTTP (validação de requisição/resposta)
 ├── errors/
-│   └── customErrors.js       # Exceções de domínio (NotFoundError, ConflictError, etc.)
+│   └── customErrors.js       # Exceções de domínio (NotFoundError, ConflictError, UnauthorizedError, etc.)
+├── middleware/
+│   └── authMiddleware.js     # Middlewares de Autenticação JWT e Autorização de Papéis
 ├── models/
 │   └── User.js               # Modelo Mongoose e validações de dados do Usuário
 ├── routes/
 │   └── userRoutes.js         # Definição das rotas da API REST
 ├── services/
-│   └── userService.js        # Camada de Serviço (Regras de negócio e operações de banco)
+│   └── userService.js        # Camada de Serviço (Regras de negócio e geração de tokens JWT)
 ├── tests/
-│   ├── unit/                 # Testes unitários do Modelo e dos Serviços
+│   ├── unit/                 # Testes unitários do Modelo, Serviços e Middlewares JWT
 │   └── integration/          # Testes de integração das rotas HTTP (Supertest)
+├── utils/
+│   └── jwt.js                # Utilitário para assinar e verificar tokens JWT
 ├── .env                      # Variáveis de ambiente (não versionado)
 ├── .env.example              # Template de variáveis de ambiente
 ├── app.js                    # Configuração da aplicação Express e Middlewares
@@ -32,121 +38,31 @@ RESTful API para gestão de usuários desenvolvida com Node.js, Express e MongoD
 
 ---
 
-## Arquitetura e Camadas
+## Arquitetura e Camadas de Segurança
 
-- **Routes (`routes/`)**: Mapeiam os endpoints REST para as funções dos controladores.
-- **Controllers (`controller/`)**: Tratam requisições HTTP, extraem dados e parâmetros, invocam a camada de serviços e retornam as respostas formatadas com seus respectivos códigos de status (200, 201, 400, 401, 404, 409).
-- **Services (`services/`)**: Concentram todas as regras de negócio, validações de unicidade de e-mail e operações assíncronas com o MongoDB via Mongoose.
-- **Models (`models/`)**: Definem os Schemas do Mongoose com validações rigorosas e métodos utilitários.
-- **Errors (`errors/`)**: Erros de domínio estruturados (`AppError`, `NotFoundError`, `ConflictError`, `ValidationError`, `UnauthorizedError`) para mapeamento limpo de status HTTP.
-
----
-
-## Regras de Validação de Dados
-
-- **`name`**: Texto obrigatório, mínimo de 2 caracteres.
-- **`birthday`**: Data obrigatória no formato válido (ex: `YYYY-MM-DD`). **Não permite datas futuras** nem datas anteriores ao ano 1900.
-- **`email`**: Formato de e-mail válido (`usuario@dominio.com`) e único no sistema.
-- **`password`**: Texto obrigatório com no mínimo 6 caracteres.
-- **`role`**: Array de papéis. Papéis permitidos: `['user', 'admin', 'manager']` (padrão: `['user']`).
+- **JWT Helper (`utils/jwt.js`)**: Responsável por assinar tokens JWT contendo `{ id, email, role }` com expiração de 24h utilizando a chave `JWT_SECRET`.
+- **Auth Middleware (`middleware/authMiddleware.js`)**: Valida o cabeçalho `Authorization: Bearer <token>` nas requisições para rotas protegidas e fornece autorização por papéis (`authorizeRoles`).
+- **Controllers (`controller/`)**: Tratam requisições HTTP e passam parâmetros para a camada de serviço.
+- **Services (`services/`)**: Executam as regras de negócio e geram o token JWT no login.
+- **Errors (`errors/`)**: Erros de domínio mapeados para códigos de status HTTP (400, 401, 403, 404, 409).
 
 ---
 
-## Sistema de Logging
+## Endpoints e Autenticação JWT
 
-Todas as tentativas e erros de validação são registrados no console com marcadores formatados:
-- `[DB SUCCESS]`: Emitido ao conectar com sucesso ao MongoDB.
-- `[VALIDATION FAILED]`: Emitido ao falhar em uma regra de negócio no modelo.
-- `[API VALIDATION ERROR]`: Emitido ao capturar requisições HTTP 400 inválidas.
-- `[API WARN]`: Emitido ao tentar buscar/atualizar usuário inexistente ou e-mail duplicado.
-- `[API SUCCESS]`: Emitido ao concluir operações de criação, atualização, exclusão e autenticação.
+### Rotas Públicas
+- `POST /api/users` (Cadastro de usuário)
+- `POST /api/users/login` (Autenticação / Obtenção de Token JWT)
 
----
-
-## Endpoints e Modelos de Requisição/Resposta
-
-### 1. Criar Usuário (`POST /api/users`)
-
-**Request Body:**
-```json
-{
-  "name": "Alice Silva",
-  "birthday": "1995-05-15",
-  "email": "alice@example.com",
-  "password": "secretPassword123",
-  "role": ["user", "admin"]
-}
-```
-
-**Response (201 Created):**
-```json
-{
-  "success": true,
-  "message": "User created successfully",
-  "data": {
-    "id": "e4b3c9a1-8d2e-4f1a-9c3b-5d6e7f8a9b0c",
-    "name": "Alice Silva",
-    "birthday": "1995-05-15",
-    "age": 31,
-    "email": "alice@example.com",
-    "role": ["user", "admin"],
-    "isActive": true,
-    "createdAt": "2026-07-29T23:00:00.000Z",
-    "updatedAt": "2026-07-29T23:00:00.000Z"
-  }
-}
-```
+### Rotas Protegidas (Exigem cabeçalho `Authorization: Bearer <token>`)
+- `GET /api/users` (Listar usuários)
+- `GET /api/users/:id` (Obter usuário por ID)
+- `PUT /api/users/:id` (Atualizar perfil)
+- `DELETE /api/users/:id` (Remover usuário)
 
 ---
 
-### 2. Listar Usuários (`GET /api/users`)
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "total": 1,
-  "data": [
-    {
-      "id": "e4b3c9a1-8d2e-4f1a-9c3b-5d6e7f8a9b0c",
-      "name": "Alice Silva",
-      "birthday": "1995-05-15",
-      "age": 31,
-      "email": "alice@example.com",
-      "role": ["user", "admin"],
-      "isActive": true,
-      "createdAt": "2026-07-29T23:00:00.000Z",
-      "updatedAt": "2026-07-29T23:00:00.000Z"
-    }
-  ]
-}
-```
-
----
-
-### 3. Obter Usuário por ID (`GET /api/users/{id}`)
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "e4b3c9a1-8d2e-4f1a-9c3b-5d6e7f8a9b0c",
-    "name": "Alice Silva",
-    "birthday": "1995-05-15",
-    "age": 31,
-    "email": "alice@example.com",
-    "role": ["user", "admin"],
-    "isActive": true,
-    "createdAt": "2026-07-29T23:00:00.000Z",
-    "updatedAt": "2026-07-29T23:00:00.000Z"
-  }
-}
-```
-
----
-
-### 4. Autenticação de Usuário (`POST /api/users/login`)
+### Exemplo: Autenticação de Usuário (`POST /api/users/login`)
 
 **Request Body:**
 ```json
@@ -156,28 +72,44 @@ Todas as tentativas e erros de validação são registrados no console com marca
 }
 ```
 
----
-
-### 5. Atualizar Perfil (`PUT /api/users/{id}`)
-
-**Request Body:**
+**Response (200 OK):**
 ```json
 {
-  "name": "Alice Silva Ramos",
-  "email": "alice.ramos@example.com",
-  "birthday": "1995-05-20"
+  "success": true,
+  "message": "Authentication successful",
+  "data": {
+    "user": {
+      "id": "e4b3c9a1-8d2e-4f1a-9c3b-5d6e7f8a9b0c",
+      "name": "Alice Silva",
+      "birthday": "1995-05-15",
+      "age": 31,
+      "email": "alice@example.com",
+      "role": ["user", "admin"],
+      "isActive": true,
+      "createdAt": "2026-07-29T23:00:00.000Z",
+      "updatedAt": "2026-07-29T23:00:00.000Z"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
 }
 ```
 
 ---
 
-### 6. Deletar Usuário (`DELETE /api/users/{id}`)
+### Como Consumir Rotas Protegidas
 
-**Response (200 OK):**
+Adicione o cabeçalho HTTP `Authorization` em suas requisições:
+```http
+GET /api/users HTTP/1.1
+Host: localhost:3000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+Caso o token não seja enviado ou seja inválido/expirado, a API retornará `401 Unauthorized`:
 ```json
 {
-  "success": true,
-  "message": "User deleted successfully"
+  "success": false,
+  "message": "Access token is required"
 }
 ```
 
@@ -190,12 +122,12 @@ Todas as tentativas e erros de validação são registrados no console com marca
    cp .env.example .env
    ```
 
-2. **Instalar as dependências:**
+2. **Instalar dependências:**
    ```bash
    npm install
    ```
 
-3. **Subir o banco de dados MongoDB 7 no Docker:**
+3. **Subir o banco de dados MongoDB no Docker:**
    ```bash
    docker compose up -d
    ```
@@ -207,9 +139,31 @@ Todas as tentativas e erros de validação são registrados no console com marca
 
 5. **Iniciar a aplicação:**
    ```bash
-   # Modo desenvolvimento (com Nodemon)
    npm run dev
-
-   # Modo produção
-   npm start
    ```
+
+## Prints de Requests & Responses (Postman)
+
+### Cadastro de Usuário (POST /api/users) ✅
+
+![Cadastro de Usuário (POST /api/users)](images/signup.png)
+
+### Login (POST /api/users/login) ✅
+
+![Login (POST /api/users/login)](images/login.png)
+
+### Listar Usuários (GET /api/users) ✅
+
+![Listar Usuários (GET /api/users)](images/list_users.png)
+
+### Obter Usuário por ID (GET /api/users/:id) ✅
+
+![Obter Usuário por ID (GET /api/users/:id)](images/get_user.png)
+
+### Atualizar Perfil (PUT /api/users/:id) ✅
+
+![Atualizar Perfil (PUT /api/users/:id)](images/update_user.png)
+
+### Remover Usuário (DELETE /api/users/:id) ✅
+
+![Remover Usuário (DELETE /api/users/:id)](images/delete_user.png)

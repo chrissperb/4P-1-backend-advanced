@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { generateToken } = require('../utils/jwt');
 const {
   NotFoundError,
   ConflictError,
@@ -94,8 +95,13 @@ class UserService {
       throw new UnauthorizedError('Invalid credentials');
     }
 
+    const token = generateToken(user);
+
     console.log(`[API SUCCESS] POST /api/users/login - User authenticated ID: ${user.id}`);
-    return user.toJSON();
+    return {
+      user: user.toJSON(),
+      token
+    };
   }
 }
 

@@ -31,10 +31,17 @@ class UnauthorizedError extends AppError {
   }
 }
 
+class ForbiddenError extends AppError {
+  constructor(message = 'Forbidden: Access denied') {
+    super(message, 403);
+  }
+}
+
 module.exports = {
   AppError,
   NotFoundError,
   ConflictError,
   ValidationError,
-  UnauthorizedError
+  UnauthorizedError,
+  ForbiddenError
 };

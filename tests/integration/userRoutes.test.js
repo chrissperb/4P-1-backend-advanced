@@ -1,17 +1,21 @@
 const request = require('supertest');
 const app = require('../../app');
 const userService = require('../../services/userService');
-const { NotFoundError, ConflictError, ValidationError, UnauthorizedError } = require('../../errors/customErrors');
+const { generateToken } = require('../../utils/jwt');
+const { NotFoundError, ConflictError, UnauthorizedError } = require('../../errors/customErrors');
 
 jest.mock('../../services/userService');
 
 describe('User Routes Integration Tests', () => {
+  let validToken;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    validToken = generateToken({ id: 'user-1', email: 'alice@example.com', role: ['user'] });
   });
 
   describe('GET /', () => {
-    it('should return health check status 200', async () => {
+    it('should return health check status 200 without token', async () => {
       const response = await request(app).get('/');
       expect(response.status).toBe(200);
       expect(response.body.status).toBe('online');
@@ -19,11 +23,19 @@ describe('User Routes Integration Tests', () => {
   });
 
   describe('GET /api/users', () => {
-    it('should return list of users with 200 OK', async () => {
+    it('should return 401 Unauthorized if token is missing', async () => {
+      const response = await request(app).get('/api/users');
+      expect(response.status).toBe(401);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should return list of users with 200 OK when valid Bearer token provided', async () => {
       const mockUsers = [{ id: '1', name: 'Alice' }];
       userService.getAllUsers.mockReturnValue(mockUsers);
 
-      const response = await request(app).get('/api/users');
+      const response = await request(app)
+        .get('/api/users')
+        .set('Authorization', `Bearer ${validToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -33,11 +45,13 @@ describe('User Routes Integration Tests', () => {
   });
 
   describe('GET /api/users/:id', () => {
-    it('should return user with 200 OK when ID exists', async () => {
+    it('should return user with 200 OK when valid token and existing ID', async () => {
       const mockUser = { id: 'user-1', name: 'Alice' };
       userService.getUserById.mockReturnValue(mockUser);
 
-      const response = await request(app).get('/api/users/user-1');
+      const response = await request(app)
+        .get('/api/users/user-1')
+        .set('Authorization', `Bearer ${validToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -49,7 +63,9 @@ describe('User Routes Integration Tests', () => {
         throw new NotFoundError('User not found');
       });
 
-      const response = await request(app).get('/api/users/missing-id');
+      const response = await request(app)
+        .get('/api/users/missing-id')
+        .set('Authorization', `Bearer ${validToken}`);
 
       expect(response.status).toBe(404);
       expect(response.body.success).toBe(false);
@@ -58,7 +74,7 @@ describe('User Routes Integration Tests', () => {
   });
 
   describe('POST /api/users', () => {
-    it('should create user and return 201 Created', async () => {
+    it('should create user and return 201 Created (Public Endpoint)', async () => {
       const newUser = { id: 'created-1', name: 'Bob', email: 'bob@example.com' };
       userService.createUser.mockReturnValue(newUser);
 
@@ -98,9 +114,12 @@ describe('User Routes Integration Tests', () => {
   });
 
   describe('POST /api/users/login', () => {
-    it('should return 200 OK on successful authentication', async () => {
-      const mockUser = { id: 'user-1', email: 'bob@example.com' };
-      userService.authenticateUser.mockReturnValue(mockUser);
+    it('should return 200 OK with user profile and JWT token on successful authentication', async () => {
+      const mockResult = {
+        user: { id: 'user-1', email: 'bob@example.com' },
+        token: 'mock.jwt.token'
+      };
+      userService.authenticateUser.mockReturnValue(mockResult);
 
       const response = await request(app)
         .post('/api/users/login')
@@ -109,6 +128,7 @@ describe('User Routes Integration Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.message).toBe('Authentication successful');
+      expect(response.body.data.token).toBe('mock.jwt.token');
     });
 
     it('should return 401 Unauthorized on invalid credentials', async () => {
@@ -127,10 +147,12 @@ describe('User Routes Integration Tests', () => {
   });
 
   describe('DELETE /api/users/:id', () => {
-    it('should return 200 OK on successful deletion', async () => {
+    it('should return 200 OK on successful deletion when authenticated', async () => {
       userService.deleteUser.mockReturnValue(true);
 
-      const response = await request(app).delete('/api/users/user-1');
+      const response = await request(app)
+        .delete('/api/users/user-1')
+        .set('Authorization', `Bearer ${validToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
